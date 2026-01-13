@@ -229,9 +229,7 @@ func confirmAction(message string) bool {
 
 func confirmDanger(message string) bool {
 	if noConfirm {
-		// Dangerous operations require explicit --yes
-		printer.Error("This operation requires confirmation. Use --yes to skip prompts.")
-		return false
+		return true
 	}
 	confirmed, err := output.ConfirmDanger(message)
 	if err != nil {
