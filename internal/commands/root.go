@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -250,6 +251,21 @@ func commandContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 30*time.Second)
 }
 
+// isNilValue checks if an interface value is nil or contains a nil pointer.
+// This is needed because in Go, an interface can be non-nil but contain a nil pointer.
+func isNilValue(v interface{}) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.Interface, reflect.Slice:
+		return rv.IsNil()
+	default:
+		return false
+	}
+}
+
 // namedResource represents a resource with an ID and Name.
 type namedResource interface {
 	GetID() string
@@ -277,7 +293,9 @@ func createOrGetResource(params createResourceParams) error {
 		spin.Stop()
 		return fmt.Errorf("failed to check existing %s: %w", params.resourceType, err)
 	}
-	if existing != nil {
+	// Check if the interface is nil AND if the underlying value is nil
+	// In Go, an interface can be non-nil but contain a nil pointer
+	if existing != nil && !isNilValue(existing) {
 		spin.Stop()
 		printer.Warning("%s '%s' already exists (ID: %s)", params.resourceType, params.name, existing.GetID())
 		return printer.PrintObject(existing)
