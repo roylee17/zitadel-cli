@@ -1,6 +1,7 @@
 package output
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -21,7 +22,7 @@ func NewSpinner(message string) *Spinner {
 	s := &Spinner{enabled: enabled}
 
 	if enabled {
-		s.s = spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+		s.s = spinner.New(spinner.CharSets[14], 100*time.Millisecond, spinner.WithWriter(os.Stderr))
 		s.s.Suffix = " " + message
 		_ = s.s.Color("cyan")
 	}
@@ -47,9 +48,9 @@ func (s *Spinner) Stop() {
 func (s *Spinner) Success(message string) {
 	s.Stop()
 	if os.Getenv("NO_COLOR") == "" {
-		Green("✓ " + message)
+		_, _ = fmt.Fprintf(os.Stderr, "%s\n", Green("✓ "+message))
 	} else {
-		println("✓ " + message)
+		_, _ = fmt.Fprintf(os.Stderr, "✓ %s\n", message)
 	}
 }
 
@@ -57,9 +58,9 @@ func (s *Spinner) Success(message string) {
 func (s *Spinner) Fail(message string) {
 	s.Stop()
 	if os.Getenv("NO_COLOR") == "" {
-		Red("✗ " + message)
+		_, _ = fmt.Fprintf(os.Stderr, "%s\n", Red("✗ "+message))
 	} else {
-		println("✗ " + message)
+		_, _ = fmt.Fprintf(os.Stderr, "✗ %s\n", message)
 	}
 }
 

@@ -238,9 +238,9 @@ func (p *Printer) printTemplate(v interface{}) error {
 // Success prints a success message.
 func (p *Printer) Success(format string, args ...interface{}) {
 	if p.noColor {
-		_, _ = fmt.Fprintf(p.out, "✓ "+format+"\n", args...)
+		_, _ = fmt.Fprintf(os.Stderr, "✓ "+format+"\n", args...)
 	} else {
-		_, _ = color.New(color.FgGreen).Fprintf(p.out, "✓ "+format+"\n", args...)
+		_, _ = color.New(color.FgGreen).Fprintf(os.Stderr, "✓ "+format+"\n", args...)
 	}
 }
 
@@ -256,18 +256,18 @@ func (p *Printer) Error(format string, args ...interface{}) {
 // Warning prints a warning message.
 func (p *Printer) Warning(format string, args ...interface{}) {
 	if p.noColor {
-		_, _ = fmt.Fprintf(p.out, "⚠ "+format+"\n", args...)
+		_, _ = fmt.Fprintf(os.Stderr, "⚠ "+format+"\n", args...)
 	} else {
-		_, _ = color.New(color.FgYellow).Fprintf(p.out, "⚠ "+format+"\n", args...)
+		_, _ = color.New(color.FgYellow).Fprintf(os.Stderr, "⚠ "+format+"\n", args...)
 	}
 }
 
 // Info prints an info message.
 func (p *Printer) Info(format string, args ...interface{}) {
 	if p.noColor {
-		_, _ = fmt.Fprintf(p.out, "ℹ "+format+"\n", args...)
+		_, _ = fmt.Fprintf(os.Stderr, "ℹ "+format+"\n", args...)
 	} else {
-		_, _ = color.New(color.FgCyan).Fprintf(p.out, "ℹ "+format+"\n", args...)
+		_, _ = color.New(color.FgCyan).Fprintf(os.Stderr, "ℹ "+format+"\n", args...)
 	}
 }
 
@@ -363,8 +363,8 @@ func (p *Printer) printKeyValueFormatted(kv map[string]string) {
 // Header prints a section header.
 func (p *Printer) Header(s string) {
 	if p.noColor {
-		_, _ = fmt.Fprintf(p.out, "=== %s ===\n", s)
+		_, _ = fmt.Fprintf(os.Stderr, "=== %s ===\n", s)
 	} else {
-		_, _ = color.New(color.Bold).Fprintf(p.out, "=== %s ===\n", s)
+		_, _ = color.New(color.Bold).Fprintf(os.Stderr, "=== %s ===\n", s)
 	}
 }
