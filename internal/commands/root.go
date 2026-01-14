@@ -130,7 +130,9 @@ Documentation:
 		if clientCfg.URL == "" {
 			return fmt.Errorf("zitadel URL required (--url, ZITADEL_URL, or configure context)")
 		}
-		if clientCfg.Token == "" {
+		// Skip PAT validation for jwt command (it generates PAT from JWT)
+		isJWTCommand := cmd.Name() == "jwt" || (cmd.Parent() != nil && cmd.Parent().Name() == "pat" && cmd.Name() == "jwt")
+		if clientCfg.Token == "" && !isJWTCommand {
 			return fmt.Errorf("zitadel PAT required (--token, ZITADEL_PAT, or configure context)")
 		}
 

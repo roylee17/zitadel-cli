@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -89,9 +90,8 @@ func getEnv(key, defaultValue string) string {
 
 // New creates a new Zitadel client.
 func New(cfg Config) (*Client, error) {
-	if cfg.Token == "" {
-		return nil, fmt.Errorf("ZITADEL_PAT is required")
-	}
+	// Token is optional for OAuth operations (e.g., JWT bearer grant)
+	// but required for most other operations
 
 	// Ensure URL doesn't have trailing slash
 	cfg.URL = strings.TrimSuffix(cfg.URL, "/")
@@ -114,6 +114,11 @@ func New(cfg Config) (*Client, error) {
 
 // request performs an HTTP request to the Zitadel API.
 func (c *Client) request(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
+	// Validate token is present for authenticated requests
+	if c.token == "" {
+		return nil, fmt.Errorf("authentication token required (PAT must be set)")
+	}
+
 	var bodyReader io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -130,6 +135,78 @@ func (c *Client) request(ctx context.Context, method, path string, body interfac
 
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return respBody, nil
+}
+
+// requestWithToken performs an HTTP request to the Zitadel API with a custom token.
+func (c *Client) requestWithToken(ctx context.Context, method, path, token string, body interface{}) ([]byte, error) {
+	var bodyReader io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("marshal request: %w", err)
+		}
+		bodyReader = bytes.NewReader(data)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bodyReader)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(respBody))
+	}
+
+	return respBody, nil
+}
+
+// requestOAuth performs an unauthenticated OAuth request (form-encoded).
+func (c *Client) requestOAuth(ctx context.Context, path string, data map[string]string) ([]byte, error) {
+	values := url.Values{}
+	for k, v := range data {
+		values.Set(k, v)
+	}
+	bodyStr := values.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+path, strings.NewReader(bodyStr))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.httpClient.Do(req)
@@ -956,6 +1033,60 @@ func (c *Client) CreateMachineUserPAT(ctx context.Context, userID string, expira
 		return "", err
 	}
 	return pat.Token, nil
+}
+
+// ============================================================================
+// OAuth Operations
+// ============================================================================
+
+// ExchangeJWTForAccessToken exchanges a JWT assertion for an OAuth access token.
+func (c *Client) ExchangeJWTForAccessToken(ctx context.Context, jwtAssertion string) (string, error) {
+	resp, err := c.requestOAuth(ctx, "/oauth/v2/token", map[string]string{
+		"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+		"scope":       "openid urn:zitadel:iam:org:project:id:zitadel:aud",
+		"assertion":   jwtAssertion,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	var result struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return "", fmt.Errorf("parse response: %w", err)
+	}
+
+	if result.AccessToken == "" {
+		return "", fmt.Errorf("no access token in response: %s", string(resp))
+	}
+
+	return result.AccessToken, nil
+}
+
+// CreatePATWithAccessToken creates a PAT using an OAuth access token (not a PAT).
+func (c *Client) CreatePATWithAccessToken(ctx context.Context, accessToken, userID string, expirationDate string) (*PAT, error) {
+	path := fmt.Sprintf(pathUserPATs, userID)
+	resp, err := c.requestWithToken(ctx, "POST", path, accessToken, map[string]interface{}{
+		"expirationDate": expirationDate,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		TokenID string `json:"tokenId"`
+		Token   string `json:"token"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	return &PAT{
+		ID:         result.TokenID,
+		Token:      result.Token,
+		Expiration: expirationDate,
+	}, nil
 }
 
 // ============================================================================
