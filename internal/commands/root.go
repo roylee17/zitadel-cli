@@ -258,6 +258,7 @@ func isNilValue(v interface{}) bool {
 		return true
 	}
 	rv := reflect.ValueOf(v)
+	//nolint:exhaustive // only nil-able types need explicit handling
 	switch rv.Kind() {
 	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.Interface, reflect.Slice:
 		return rv.IsNil()

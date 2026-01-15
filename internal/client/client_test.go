@@ -128,13 +128,17 @@ func TestNew(t *testing.T) {
 			},
 		},
 		{
-			name: "missing token",
+			name: "missing token allowed for OAuth operations",
 			config: Config{
 				URL:   "https://example.com",
 				Token: "",
 			},
-			wantErr: true,
-			errMsg:  "ZITADEL_PAT is required",
+			wantErr: false,
+			checkFunc: func(t *testing.T, c *Client) {
+				// Token is now optional in New() for OAuth operations
+				// Token validation happens in request() for authenticated endpoints
+				assert.NotNil(t, c)
+			},
 		},
 		{
 			name: "trailing slash trimmed",

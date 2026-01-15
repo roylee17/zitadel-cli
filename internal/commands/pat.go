@@ -225,7 +225,7 @@ Examples:
 		var keyData []byte
 		var err error
 		if patJWTKeyFile != "" {
-			keyData, err = os.ReadFile(patJWTKeyFile)
+			keyData, err = os.ReadFile(patJWTKeyFile) //nolint:gosec // G304: file path from CLI flag is intentional
 			if err != nil {
 				return fmt.Errorf("read key file: %w", err)
 			}
@@ -314,7 +314,7 @@ Examples:
 		}
 
 		// Output PAT token to stdout
-		fmt.Fprintln(os.Stdout, pat.Token)
+		_, _ = fmt.Fprintln(os.Stdout, pat.Token)
 
 		return nil
 	},
