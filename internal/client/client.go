@@ -1043,8 +1043,8 @@ func (c *Client) CreateMachineUserPAT(ctx context.Context, userID string, expira
 func (c *Client) ExchangeJWTForAccessToken(ctx context.Context, jwtAssertion string) (string, error) {
 	resp, err := c.requestOAuth(ctx, "/oauth/v2/token", map[string]string{
 		"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
-		"scope":       "openid urn:zitadel:iam:org:project:id:zitadel:aud",
-		"assertion":   jwtAssertion,
+		"scope":      "openid urn:zitadel:iam:org:project:id:zitadel:aud",
+		"assertion":  jwtAssertion,
 	})
 	if err != nil {
 		return "", err
@@ -1065,7 +1065,7 @@ func (c *Client) ExchangeJWTForAccessToken(ctx context.Context, jwtAssertion str
 }
 
 // CreatePATWithAccessToken creates a PAT using an OAuth access token (not a PAT).
-func (c *Client) CreatePATWithAccessToken(ctx context.Context, accessToken, userID string, expirationDate string) (*PAT, error) {
+func (c *Client) CreatePATWithAccessToken(ctx context.Context, accessToken, userID, expirationDate string) (*PAT, error) {
 	path := fmt.Sprintf(pathUserPATs, userID)
 	resp, err := c.requestWithToken(ctx, "POST", path, accessToken, map[string]interface{}{
 		"expirationDate": expirationDate,

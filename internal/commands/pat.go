@@ -25,7 +25,7 @@ var (
 	patUsername       string
 	patExpirationDays int
 	patJWTKeyFile     string
-	patJWTKeyString    string
+	patJWTKeyString   string
 )
 
 var patListCmd = &cobra.Command{
