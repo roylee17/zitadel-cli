@@ -31,14 +31,14 @@ body = """
 - **{{ commit.scope }}:** {{ commit.message | upper_first }}
   {%- if commit.breaking %} [**BREAKING**]{% endif %}
   {%- if commit.github.pr_number %} ([#{{ commit.github.pr_number }}]({{ self::remote_url() }}/pull/{{ commit.github.pr_number }})){% endif %}
-  {%- if commit.github.username %} by @{{ commit.github.username }}{% endif %}
+  {%- if commit.author.name %} by {{ commit.author.name }}{% endif %}
 {%- endfor %}
 {% for commit in commits %}
 {%- if not commit.scope %}
 - {{ commit.message | upper_first }}
   {%- if commit.breaking %} [**BREAKING**]{% endif %}
   {%- if commit.github.pr_number %} ([#{{ commit.github.pr_number }}]({{ self::remote_url() }}/pull/{{ commit.github.pr_number }})){% endif %}
-  {%- if commit.github.username %} by @{{ commit.github.username }}{% endif %}
+  {%- if commit.author.name %} by {{ commit.author.name }}{% endif %}
 {% endif -%}
 {%- endfor -%}
 {% endfor %}
