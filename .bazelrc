@@ -1,5 +1,7 @@
 # Build options
 build --enable_platform_specific_config
+build --workspace_status_command=tools/workspace_status.sh
+build --stamp
 
 # Go configuration - static binaries
 build --@rules_go//go/config:pure=true

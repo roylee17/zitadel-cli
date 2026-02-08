@@ -1117,3 +1117,589 @@ func (c *Client) Healthz(ctx context.Context) error {
 	_, err := c.request(ctx, "GET", pathHealthz, nil)
 	return err
 }
+
+// ============================================================================
+// Action Operations
+// ============================================================================
+
+// Action represents a Zitadel Action (JavaScript function).
+type Action struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Script        string `json:"script"`
+	Timeout       string `json:"timeout"`
+	AllowedToFail bool   `json:"allowedToFail"`
+	State         string `json:"state"`
+}
+
+// CreateActionConfig holds action creation configuration.
+type CreateActionConfig struct {
+	Name          string
+	Script        string
+	Timeout       string // e.g., "10s"
+	AllowedToFail bool
+}
+
+// ListActions returns all actions.
+func (c *Client) ListActions(ctx context.Context) ([]Action, error) {
+	resp, err := c.request(ctx, "POST", "/management/v1/actions/_search", map[string]interface{}{})
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Result []struct {
+			ID            string `json:"id"`
+			Name          string `json:"name"`
+			Script        string `json:"script"`
+			Timeout       string `json:"timeout"`
+			AllowedToFail bool   `json:"allowedToFail"`
+			State         string `json:"state"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	actions := make([]Action, len(result.Result))
+	for i, a := range result.Result {
+		actions[i] = Action{
+			ID:            a.ID,
+			Name:          a.Name,
+			Script:        a.Script,
+			Timeout:       a.Timeout,
+			AllowedToFail: a.AllowedToFail,
+			State:         a.State,
+		}
+	}
+	return actions, nil
+}
+
+// GetActionByName finds an action by name.
+func (c *Client) GetActionByName(ctx context.Context, name string) (*Action, error) {
+	resp, err := c.request(ctx, "POST", "/management/v1/actions/_search", map[string]interface{}{
+		"queries": []map[string]interface{}{
+			{
+				"actionNameQuery": map[string]interface{}{
+					"name":   name,
+					"method": "TEXT_QUERY_METHOD_EQUALS",
+				},
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Result []struct {
+			ID            string `json:"id"`
+			Name          string `json:"name"`
+			Script        string `json:"script"`
+			Timeout       string `json:"timeout"`
+			AllowedToFail bool   `json:"allowedToFail"`
+			State         string `json:"state"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	if len(result.Result) == 0 {
+		return nil, nil
+	}
+
+	a := result.Result[0]
+	return &Action{
+		ID:            a.ID,
+		Name:          a.Name,
+		Script:        a.Script,
+		Timeout:       a.Timeout,
+		AllowedToFail: a.AllowedToFail,
+		State:         a.State,
+	}, nil
+}
+
+// CreateAction creates a new action.
+func (c *Client) CreateAction(ctx context.Context, cfg CreateActionConfig) (*Action, error) {
+	timeout := cfg.Timeout
+	if timeout == "" {
+		timeout = "10s"
+	}
+
+	resp, err := c.request(ctx, "POST", "/management/v1/actions", map[string]interface{}{
+		"name":          cfg.Name,
+		"script":        cfg.Script,
+		"timeout":       timeout,
+		"allowedToFail": cfg.AllowedToFail,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	return &Action{
+		ID:            result.ID,
+		Name:          cfg.Name,
+		Script:        cfg.Script,
+		Timeout:       timeout,
+		AllowedToFail: cfg.AllowedToFail,
+		State:         "ACTION_STATE_ACTIVE",
+	}, nil
+}
+
+// UpdateAction updates an existing action.
+func (c *Client) UpdateAction(ctx context.Context, actionID string, cfg CreateActionConfig) error {
+	timeout := cfg.Timeout
+	if timeout == "" {
+		timeout = "10s"
+	}
+
+	path := fmt.Sprintf("/management/v1/actions/%s", actionID)
+	_, err := c.request(ctx, "PUT", path, map[string]interface{}{
+		"name":          cfg.Name,
+		"script":        cfg.Script,
+		"timeout":       timeout,
+		"allowedToFail": cfg.AllowedToFail,
+	})
+	return err
+}
+
+// DeleteAction deletes an action.
+func (c *Client) DeleteAction(ctx context.Context, actionID string) error {
+	path := fmt.Sprintf("/management/v1/actions/%s", actionID)
+	_, err := c.request(ctx, "DELETE", path, nil)
+	return err
+}
+
+// FlowType represents a Zitadel flow type for actions.
+type FlowType string
+
+const (
+	// FlowTypeExternalAuthentication is the external authentication flow.
+	FlowTypeExternalAuthentication FlowType = "FLOW_TYPE_EXTERNAL_AUTHENTICATION"
+	// FlowTypeCustomizeToken is the token customization flow.
+	FlowTypeCustomizeToken FlowType = "FLOW_TYPE_CUSTOMISE_TOKEN" //nolint:gosec // not a credential
+	// FlowTypeInternalAuthentication is the internal authentication flow.
+	FlowTypeInternalAuthentication FlowType = "FLOW_TYPE_INTERNAL_AUTHENTICATION"
+	// FlowTypeComplimentToken is the complement token flow.
+	FlowTypeComplimentToken FlowType = "FLOW_TYPE_COMPLEMENT_TOKEN" //nolint:gosec // not a credential
+)
+
+// TriggerType represents a trigger type within a flow.
+type TriggerType string
+
+const (
+	// TriggerTypePostAuthentication fires after external authentication.
+	TriggerTypePostAuthentication TriggerType = "TRIGGER_TYPE_POST_AUTHENTICATION"
+	// TriggerTypePreCreation fires before user creation in external auth.
+	TriggerTypePreCreation TriggerType = "TRIGGER_TYPE_PRE_CREATION"
+	// TriggerTypePostCreation fires after user creation in external auth.
+	TriggerTypePostCreation TriggerType = "TRIGGER_TYPE_POST_CREATION"
+
+	// TriggerTypePreAccessTokenCreation fires before access token creation.
+	TriggerTypePreAccessTokenCreation TriggerType = "TRIGGER_TYPE_PRE_ACCESS_TOKEN_CREATION"
+	// TriggerTypePreUserinfoCreation fires before userinfo creation.
+	TriggerTypePreUserinfoCreation TriggerType = "TRIGGER_TYPE_PRE_USERINFO_CREATION"
+	// TriggerTypeComplementToken fires during token complementation.
+	TriggerTypeComplementToken TriggerType = "TRIGGER_TYPE_COMPLEMENT_TOKEN"
+)
+
+// SetActionOnTrigger sets an action to run on a specific flow trigger.
+func (c *Client) SetActionOnTrigger(ctx context.Context, flowType FlowType, triggerType TriggerType, actionIDs []string) error {
+	path := fmt.Sprintf("/management/v1/flows/%s/trigger/%s", flowType, triggerType)
+	_, err := c.request(ctx, "POST", path, map[string]interface{}{
+		"actionIds": actionIDs,
+	})
+	return err
+}
+
+// ClearActionTrigger removes all actions from a trigger.
+func (c *Client) ClearActionTrigger(ctx context.Context, flowType FlowType, triggerType TriggerType) error {
+	return c.SetActionOnTrigger(ctx, flowType, triggerType, []string{})
+}
+
+// ============================================================================
+// Project Grant Operations (Provider-Consumer Model)
+// ============================================================================
+
+// ProjectGrant represents a grant of a project to another organization.
+// In the Provider-Consumer model, a provider org grants access to its projects
+// to customer orgs, allowing their users to access the project's applications.
+type ProjectGrant struct {
+	ID           string   `json:"id"`
+	ProjectID    string   `json:"projectId"`
+	GrantedOrgID string   `json:"grantedOrgId"`
+	RoleKeys     []string `json:"roleKeys"`
+	State        string   `json:"state"`
+}
+
+// CreateProjectGrant grants a project to another organization.
+// This allows users in the granted org to access the project's applications
+// with the specified roles.
+//
+// API: POST /management/v1/projects/{projectId}/grants
+func (c *Client) CreateProjectGrant(ctx context.Context, projectID, grantedOrgID string, roleKeys []string) (*ProjectGrant, error) {
+	path := fmt.Sprintf("/management/v1/projects/%s/grants", projectID)
+	resp, err := c.request(ctx, "POST", path, map[string]interface{}{
+		"grantedOrgId": grantedOrgID,
+		"roleKeys":     roleKeys,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		GrantID string `json:"grantId"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	return &ProjectGrant{
+		ID:           result.GrantID,
+		ProjectID:    projectID,
+		GrantedOrgID: grantedOrgID,
+		RoleKeys:     roleKeys,
+		State:        "PROJECT_GRANT_STATE_ACTIVE",
+	}, nil
+}
+
+// ListProjectGrants lists all grants for a project.
+//
+// API: POST /management/v1/projects/{projectId}/grants/_search
+func (c *Client) ListProjectGrants(ctx context.Context, projectID string) ([]ProjectGrant, error) {
+	path := fmt.Sprintf("/management/v1/projects/%s/grants/_search", projectID)
+	resp, err := c.request(ctx, "POST", path, map[string]interface{}{})
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Result []struct {
+			GrantID      string   `json:"grantId"`
+			GrantedOrgID string   `json:"grantedOrgId"`
+			RoleKeys     []string `json:"roleKeys"`
+			State        string   `json:"state"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	grants := make([]ProjectGrant, len(result.Result))
+	for i, g := range result.Result {
+		grants[i] = ProjectGrant{
+			ID:           g.GrantID,
+			ProjectID:    projectID,
+			GrantedOrgID: g.GrantedOrgID,
+			RoleKeys:     g.RoleKeys,
+			State:        g.State,
+		}
+	}
+	return grants, nil
+}
+
+// GetProjectGrant gets a specific project grant.
+//
+// API: GET /management/v1/projects/{projectId}/grants/{grantId}
+func (c *Client) GetProjectGrant(ctx context.Context, projectID, grantID string) (*ProjectGrant, error) {
+	path := fmt.Sprintf("/management/v1/projects/%s/grants/%s", projectID, grantID)
+	resp, err := c.request(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Grant struct {
+			GrantID      string   `json:"grantId"`
+			GrantedOrgID string   `json:"grantedOrgId"`
+			RoleKeys     []string `json:"roleKeys"`
+			State        string   `json:"state"`
+		} `json:"grant"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	return &ProjectGrant{
+		ID:           result.Grant.GrantID,
+		ProjectID:    projectID,
+		GrantedOrgID: result.Grant.GrantedOrgID,
+		RoleKeys:     result.Grant.RoleKeys,
+		State:        result.Grant.State,
+	}, nil
+}
+
+// UpdateProjectGrantRoles updates the roles on a project grant.
+//
+// API: PUT /management/v1/projects/{projectId}/grants/{grantId}
+func (c *Client) UpdateProjectGrantRoles(ctx context.Context, projectID, grantID string, roleKeys []string) error {
+	path := fmt.Sprintf("/management/v1/projects/%s/grants/%s", projectID, grantID)
+	_, err := c.request(ctx, "PUT", path, map[string]interface{}{
+		"roleKeys": roleKeys,
+	})
+	return err
+}
+
+// DeleteProjectGrant revokes a project grant.
+//
+// API: DELETE /management/v1/projects/{projectId}/grants/{grantId}
+func (c *Client) DeleteProjectGrant(ctx context.Context, projectID, grantID string) error {
+	path := fmt.Sprintf("/management/v1/projects/%s/grants/%s", projectID, grantID)
+	_, err := c.request(ctx, "DELETE", path, nil)
+	return err
+}
+
+// DeactivateProjectGrant deactivates a project grant (soft disable).
+//
+// API: POST /management/v1/projects/{projectId}/grants/{grantId}/_deactivate
+func (c *Client) DeactivateProjectGrant(ctx context.Context, projectID, grantID string) error {
+	path := fmt.Sprintf("/management/v1/projects/%s/grants/%s/_deactivate", projectID, grantID)
+	_, err := c.request(ctx, "POST", path, nil)
+	return err
+}
+
+// ReactivateProjectGrant reactivates a deactivated project grant.
+//
+// API: POST /management/v1/projects/{projectId}/grants/{grantId}/_reactivate
+func (c *Client) ReactivateProjectGrant(ctx context.Context, projectID, grantID string) error {
+	path := fmt.Sprintf("/management/v1/projects/%s/grants/%s/_reactivate", projectID, grantID)
+	_, err := c.request(ctx, "POST", path, nil)
+	return err
+}
+
+// ============================================================================
+// User Grant Operations (External User Grants)
+// ============================================================================
+
+// UserGrant represents a grant of project roles to a user.
+// This can be used to grant a user from one org access to a project in another org.
+type UserGrant struct {
+	ID        string   `json:"id"`
+	UserID    string   `json:"userId"`
+	ProjectID string   `json:"projectId"`
+	RoleKeys  []string `json:"roleKeys"`
+	State     string   `json:"state"`
+	OrgID     string   `json:"orgId"`   // The org the grant belongs to
+	GrantID   string   `json:"grantId"` // If granting via a project grant
+}
+
+// CreateUserGrant grants project roles to a user.
+// If grantID is provided, this grants roles via an existing project grant (for external users).
+// If grantID is empty, this grants roles directly on the project (for internal users).
+//
+// API: POST /management/v1/users/{userId}/grants
+func (c *Client) CreateUserGrant(ctx context.Context, userID, projectID string, roleKeys []string, grantID string) (*UserGrant, error) {
+	path := fmt.Sprintf("/management/v1/users/%s/grants", userID)
+
+	payload := map[string]interface{}{
+		"projectId": projectID,
+		"roleKeys":  roleKeys,
+	}
+	if grantID != "" {
+		payload["projectGrantId"] = grantID
+	}
+
+	resp, err := c.request(ctx, "POST", path, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		UserGrantID string `json:"userGrantId"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	return &UserGrant{
+		ID:        result.UserGrantID,
+		UserID:    userID,
+		ProjectID: projectID,
+		RoleKeys:  roleKeys,
+		GrantID:   grantID,
+		State:     "USER_GRANT_STATE_ACTIVE",
+	}, nil
+}
+
+// ListUserGrants lists all grants for a user.
+//
+// API: POST /management/v1/users/{userId}/grants/_search
+func (c *Client) ListUserGrants(ctx context.Context, userID string) ([]UserGrant, error) {
+	path := fmt.Sprintf("/management/v1/users/%s/grants/_search", userID)
+	resp, err := c.request(ctx, "POST", path, map[string]interface{}{})
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Result []struct {
+			ID        string   `json:"id"`
+			UserID    string   `json:"userId"`
+			ProjectID string   `json:"projectId"`
+			RoleKeys  []string `json:"roleKeys"`
+			State     string   `json:"state"`
+			OrgID     string   `json:"orgId"`
+			GrantID   string   `json:"grantId"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	grants := make([]UserGrant, len(result.Result))
+	for i, g := range result.Result {
+		grants[i] = UserGrant{
+			ID:        g.ID,
+			UserID:    g.UserID,
+			ProjectID: g.ProjectID,
+			RoleKeys:  g.RoleKeys,
+			State:     g.State,
+			OrgID:     g.OrgID,
+			GrantID:   g.GrantID,
+		}
+	}
+	return grants, nil
+}
+
+// SearchUserGrants searches for user grants across all users with optional filters.
+//
+// API: POST /management/v1/users/grants/_search
+func (c *Client) SearchUserGrants(ctx context.Context, projectID, userID string) ([]UserGrant, error) {
+	queries := []map[string]interface{}{}
+
+	if projectID != "" {
+		queries = append(queries, map[string]interface{}{
+			"projectIdQuery": map[string]interface{}{
+				"projectId": projectID,
+			},
+		})
+	}
+	if userID != "" {
+		queries = append(queries, map[string]interface{}{
+			"userIdQuery": map[string]interface{}{
+				"userId": userID,
+			},
+		})
+	}
+
+	payload := map[string]interface{}{}
+	if len(queries) > 0 {
+		payload["queries"] = queries
+	}
+
+	resp, err := c.request(ctx, "POST", "/management/v1/users/grants/_search", payload)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Result []struct {
+			ID        string   `json:"id"`
+			UserID    string   `json:"userId"`
+			ProjectID string   `json:"projectId"`
+			RoleKeys  []string `json:"roleKeys"`
+			State     string   `json:"state"`
+			OrgID     string   `json:"orgId"`
+			GrantID   string   `json:"grantId"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	grants := make([]UserGrant, len(result.Result))
+	for i, g := range result.Result {
+		grants[i] = UserGrant{
+			ID:        g.ID,
+			UserID:    g.UserID,
+			ProjectID: g.ProjectID,
+			RoleKeys:  g.RoleKeys,
+			State:     g.State,
+			OrgID:     g.OrgID,
+			GrantID:   g.GrantID,
+		}
+	}
+	return grants, nil
+}
+
+// GetUserGrant gets a specific user grant.
+//
+// API: GET /management/v1/users/{userId}/grants/{grantId}
+func (c *Client) GetUserGrant(ctx context.Context, userID, grantID string) (*UserGrant, error) {
+	path := fmt.Sprintf("/management/v1/users/%s/grants/%s", userID, grantID)
+	resp, err := c.request(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		UserGrant struct {
+			ID        string   `json:"id"`
+			UserID    string   `json:"userId"`
+			ProjectID string   `json:"projectId"`
+			RoleKeys  []string `json:"roleKeys"`
+			State     string   `json:"state"`
+			OrgID     string   `json:"orgId"`
+			GrantID   string   `json:"grantId"`
+		} `json:"userGrant"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	return &UserGrant{
+		ID:        result.UserGrant.ID,
+		UserID:    result.UserGrant.UserID,
+		ProjectID: result.UserGrant.ProjectID,
+		RoleKeys:  result.UserGrant.RoleKeys,
+		State:     result.UserGrant.State,
+		OrgID:     result.UserGrant.OrgID,
+		GrantID:   result.UserGrant.GrantID,
+	}, nil
+}
+
+// UpdateUserGrantRoles updates the roles on a user grant.
+//
+// API: PUT /management/v1/users/{userId}/grants/{grantId}
+func (c *Client) UpdateUserGrantRoles(ctx context.Context, userID, grantID string, roleKeys []string) error {
+	path := fmt.Sprintf("/management/v1/users/%s/grants/%s", userID, grantID)
+	_, err := c.request(ctx, "PUT", path, map[string]interface{}{
+		"roleKeys": roleKeys,
+	})
+	return err
+}
+
+// DeleteUserGrant revokes a user grant.
+//
+// API: DELETE /management/v1/users/{userId}/grants/{grantId}
+func (c *Client) DeleteUserGrant(ctx context.Context, userID, grantID string) error {
+	path := fmt.Sprintf("/management/v1/users/%s/grants/%s", userID, grantID)
+	_, err := c.request(ctx, "DELETE", path, nil)
+	return err
+}
+
+// DeactivateUserGrant deactivates a user grant (soft disable).
+//
+// API: POST /management/v1/users/{userId}/grants/{grantId}/_deactivate
+func (c *Client) DeactivateUserGrant(ctx context.Context, userID, grantID string) error {
+	path := fmt.Sprintf("/management/v1/users/%s/grants/%s/_deactivate", userID, grantID)
+	_, err := c.request(ctx, "POST", path, nil)
+	return err
+}
+
+// ReactivateUserGrant reactivates a deactivated user grant.
+//
+// API: POST /management/v1/users/{userId}/grants/{grantId}/_reactivate
+func (c *Client) ReactivateUserGrant(ctx context.Context, userID, grantID string) error {
+	path := fmt.Sprintf("/management/v1/users/%s/grants/%s/_reactivate", userID, grantID)
+	_, err := c.request(ctx, "POST", path, nil)
+	return err
+}

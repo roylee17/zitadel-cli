@@ -119,4 +119,5 @@ func init() {
 	projectCmd.AddCommand(projectGetCmd)
 	projectCmd.AddCommand(projectCreateCmd)
 	projectCmd.AddCommand(projectDeleteCmd)
+	projectCmd.AddCommand(projectGrantCmd)
 }

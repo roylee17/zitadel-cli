@@ -201,6 +201,8 @@ func init() {
 	rootCmd.AddCommand(healthzCmd)
 	rootCmd.AddCommand(whoamiCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(actionCmd)
+	rootCmd.AddCommand(oidcCmd)
 
 	// Custom version template
 	rootCmd.SetVersionTemplate(version.Full() + "\n")
